@@ -8,6 +8,7 @@ import LoginScreen          from '../screens/LoginScreen';
 import RegisterScreen       from '../screens/RegisterScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
 import ResetPasswordScreen  from '../screens/ResetPasswordScreen';
+import DashboardScreen      from '../screens/DashboardScreen';
 import QueuesScreen         from '../screens/QueuesScreen';
 import QueueDetailScreen    from '../screens/QueueDetailScreen';
 import CalendarScreen       from '../screens/CalendarScreen';
@@ -47,6 +48,11 @@ function AppTabs() {
         tabBarStyle: { borderTopColor: '#e5e7eb' },
       }}
     >
+      <Tab.Screen
+        name="Início"
+        component={DashboardScreen}
+        options={{ tabBarIcon: ({ color }) => <Text style={{ fontSize: 18, color }}>🏠</Text> }}
+      />
       <Tab.Screen
         name="Filas"
         component={QueuesStack}
