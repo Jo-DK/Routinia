@@ -1,0 +1,11 @@
+/* Importa o Tailwind CSS — estas três linhas substituem um arquivo CSS inteiro */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos globais personalizados */
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}

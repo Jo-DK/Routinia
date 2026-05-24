@@ -1,0 +1,82 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  passwordResets PasswordReset[]
+  queues         Queue[]
+  schedules      Schedule[]
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Queue {
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  color            String   @default("#6366f1")
+  rotationType     String   @default("sequential")
+  currentTaskIndex Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+  schedules Schedule[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  queueId String
+  queue   Queue  @relation(fields: [queueId], references: [id], onDelete: Cascade)
+}
+
+// =====================================================
+// AGENDAMENTO SEMANAL
+// Associa uma Fila a um dia da semana + horário.
+// É um template recorrente (toda semana, toda Seg às 07:00 etc.)
+//
+// dayOfWeek: 0=Segunda … 6=Domingo
+// startTime / endTime: "HH:MM" (ex: "07:00", "08:30")
+// =====================================================
+model Schedule {
+  id        String   @id @default(cuid())
+  dayOfWeek Int      // 0=Seg, 1=Ter, 2=Qua, 3=Qui, 4=Sex, 5=Sáb, 6=Dom
+  startTime String   // "HH:MM"
+  endTime   String   // "HH:MM"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  queueId String
+  queue   Queue  @relation(fields: [queueId], references: [id], onDelete: Cascade)
+}
