@@ -42,6 +42,10 @@ model Queue {
   // 0=Segunda, 1=Terça, 2=Quarta, 3=Quinta, 4=Sexta, 5=Sábado, 6=Domingo
   // Array vazio [] significa sem restrição (todo dia).
   weekDays         Int[]    @default([])
+  // Horário padrão opcional — usado para detectar conflitos e pré-preencher o calendário.
+  // Formato "HH:MM". null = sem horário definido.
+  defaultStartTime String?
+  defaultEndTime   String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

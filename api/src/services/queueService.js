@@ -60,14 +60,16 @@ async function getQueue(userId, queueId) {
  * weekDays: array de inteiros 0–6 (0=Seg, 6=Dom).
  * Array vazio [] = sem restrição de dias (ativa todo dia).
  */
-async function createQueue(userId, { name, description, color, rotationType, weekDays }) {
+async function createQueue(userId, { name, description, color, rotationType, weekDays, defaultStartTime, defaultEndTime }) {
   return prisma.queue.create({
     data: {
       name,
-      description: description || null,
-      color: color || '#6366f1',
-      rotationType: rotationType || 'sequential',
-      weekDays: Array.isArray(weekDays) ? weekDays : [],
+      description:      description      || null,
+      color:            color            || '#6366f1',
+      rotationType:     rotationType     || 'sequential',
+      weekDays:         Array.isArray(weekDays) ? weekDays : [],
+      defaultStartTime: defaultStartTime || null,
+      defaultEndTime:   defaultEndTime   || null,
       userId,
     },
     include: { tasks: true },
@@ -78,7 +80,7 @@ async function createQueue(userId, { name, description, color, rotationType, wee
  * Atualiza uma fila existente.
  * weekDays: array de inteiros 0–6. undefined = não altera; [] = sem restrição.
  */
-async function updateQueue(userId, queueId, { name, description, color, rotationType, weekDays }) {
+async function updateQueue(userId, queueId, { name, description, color, rotationType, weekDays, defaultStartTime, defaultEndTime }) {
   const queue = await prisma.queue.findFirst({ where: { id: queueId, userId } });
   if (!queue) throw new Error('QUEUE_NOT_FOUND');
 
@@ -90,6 +92,9 @@ async function updateQueue(userId, queueId, { name, description, color, rotation
       color,
       rotationType,
       ...(Array.isArray(weekDays) ? { weekDays } : {}),
+      // undefined = não altera; null = limpa; string = actualiza
+      ...(defaultStartTime !== undefined ? { defaultStartTime: defaultStartTime || null } : {}),
+      ...(defaultEndTime   !== undefined ? { defaultEndTime:   defaultEndTime   || null } : {}),
     },
     include: { tasks: { orderBy: { order: 'asc' } } },
   });

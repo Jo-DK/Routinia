@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
+import { useQueueConflict } from '../contexts/QueueConflictContext';
 
 import LoginScreen          from '../screens/LoginScreen';
 import RegisterScreen       from '../screens/RegisterScreen';
@@ -39,6 +40,7 @@ function QueuesStack() {
 
 // Tab navigation para a área logada
 function AppTabs() {
+  const { hasConflict } = useQueueConflict();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -61,7 +63,11 @@ function AppTabs() {
       <Tab.Screen
         name="Calendário"
         component={CalendarScreen}
-        options={{ tabBarIcon: ({ color }) => <Text style={{ fontSize: 18, color }}>📅</Text> }}
+        options={{
+          tabBarIcon: ({ color }) => <Text style={{ fontSize: 18, color }}>📅</Text>,
+          tabBarBadge: hasConflict ? '!' : undefined,
+          tabBarBadgeStyle: { backgroundColor: '#f59e0b', color: 'white', fontSize: 10, minWidth: 16, height: 16 },
+        }}
       />
     </Tab.Navigator>
   );

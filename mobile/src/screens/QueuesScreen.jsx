@@ -6,6 +6,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
+import { useQueueConflict } from '../contexts/QueueConflictContext';
 import api from '../api/axios';
 
 const COLORS = [
@@ -36,11 +37,13 @@ const DAY_PRESETS = [
 function QueueModal({ visible, queue, onClose, onSave }) {
   const isEditing = !!queue;
   const [name,         setName]         = useState('');
-  const [description,  setDescription]  = useState('');
-  const [color,        setColor]        = useState('#6366f1');
-  const [rotationType, setRotationType] = useState('sequential');
-  const [weekDays,     setWeekDays]     = useState([]); // [] = todo dia
-  const [loading,      setLoading]      = useState(false);
+  const [description,      setDescription]      = useState('');
+  const [color,            setColor]            = useState('#6366f1');
+  const [rotationType,     setRotationType]     = useState('sequential');
+  const [weekDays,         setWeekDays]         = useState([]);
+  const [defaultStartTime, setDefaultStartTime] = useState('');
+  const [defaultEndTime,   setDefaultEndTime]   = useState('');
+  const [loading,          setLoading]          = useState(false);
 
   // Preenche o form quando abre para edição
   useEffect(() => {
@@ -50,9 +53,12 @@ function QueueModal({ visible, queue, onClose, onSave }) {
       setColor(queue.color);
       setRotationType(queue.rotationType);
       setWeekDays(queue.weekDays ?? []);
+      setDefaultStartTime(queue.defaultStartTime ?? '');
+      setDefaultEndTime(queue.defaultEndTime ?? '');
     } else {
       setName(''); setDescription(''); setColor('#6366f1');
       setRotationType('sequential'); setWeekDays([]);
+      setDefaultStartTime(''); setDefaultEndTime('');
     }
   }, [queue, visible]);
 
@@ -74,7 +80,7 @@ function QueueModal({ visible, queue, onClose, onSave }) {
     if (!name.trim()) { Alert.alert('Erro', 'Nome é obrigatório'); return; }
     setLoading(true);
     try {
-      const payload = { name, description, color, rotationType, weekDays };
+      const payload = { name, description, color, rotationType, weekDays, defaultStartTime, defaultEndTime };
       const res = isEditing
         ? await api.put(`/queues/${queue.id}`, payload)
         : await api.post('/queues', payload);
@@ -173,6 +179,34 @@ function QueueModal({ visible, queue, onClose, onSave }) {
               : `📅 Ativa: ${weekDays.map(d => DAYS[d]).join(', ')}`}
           </Text>
 
+          {/* ── Horário padrão (opcional) ── */}
+          <Text style={styles.fieldLabel}>Horário padrão <Text style={styles.fieldLabelOptional}>(opcional)</Text></Text>
+          <Text style={styles.fieldHint}>Usado para detectar conflitos. Deixe em branco se não houver horário fixo.</Text>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldSubLabel}>Início</Text>
+              <TextInput
+                style={styles.input}
+                value={defaultStartTime}
+                onChangeText={setDefaultStartTime}
+                placeholder="08:00"
+                keyboardType="numeric"
+                maxLength={5}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldSubLabel}>Fim</Text>
+              <TextInput
+                style={styles.input}
+                value={defaultEndTime}
+                onChangeText={setDefaultEndTime}
+                placeholder="09:00"
+                keyboardType="numeric"
+                maxLength={5}
+              />
+            </View>
+          </View>
+
           <Text style={styles.fieldLabel}>Tipo de rotação</Text>
           {[
             { value: 'sequential', label: '🔄 Automática', desc: 'Avança sozinha a cada execução' },
@@ -247,6 +281,7 @@ function QueueCard({ queue, onPress, onEdit, onDelete }) {
 export default function QueuesScreen() {
   const navigation = useNavigation();
   const { user, logout } = useAuth();
+  const { refresh: refreshConflict } = useQueueConflict();
 
   const [queues,  setQueues]  = useState([]);
   const [loading, setLoading] = useState(true);
@@ -272,6 +307,7 @@ export default function QueuesScreen() {
       const exists = prev.find(q => q.id === saved.id);
       return exists ? prev.map(q => q.id === saved.id ? saved : q) : [saved, ...prev];
     });
+    refreshConflict();
   }
 
   function handleDeleteConfirm(queue) {
@@ -286,6 +322,7 @@ export default function QueuesScreen() {
             try {
               await api.delete(`/queues/${queue.id}`);
               setQueues(prev => prev.filter(q => q.id !== queue.id));
+              refreshConflict();
             } catch {
               Alert.alert('Erro', 'Não foi possível excluir.');
             }
@@ -387,7 +424,10 @@ const styles = StyleSheet.create({
   modalCancel:     { fontSize: 15, color: '#9ca3af' },
   modalSave:       { fontSize: 15, fontWeight: '600', color: '#4f46e5' },
   modalBody:       { padding: 20 },
-  fieldLabel:      { fontSize: 13, fontWeight: '500', color: '#374151', marginBottom: 6, marginTop: 12 },
+  fieldLabel:         { fontSize: 13, fontWeight: '500', color: '#374151', marginBottom: 4, marginTop: 12 },
+  fieldLabelOptional: { fontSize: 12, fontWeight: '400', color: '#9ca3af' },
+  fieldHint:          { fontSize: 11, color: '#9ca3af', marginBottom: 6 },
+  fieldSubLabel:      { fontSize: 11, color: '#6b7280', marginBottom: 4 },
   input:           { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: '#1f2937' },
   colorRow:        { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   colorCircle:     { width: 32, height: 32, borderRadius: 16 },

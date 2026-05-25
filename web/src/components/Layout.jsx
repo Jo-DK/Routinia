@@ -4,19 +4,21 @@
 // =====================================================
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useQueueConflict } from '../contexts/QueueConflictContext';
 
 export default function Layout({ children, className = '' }) {
   const { user, logout } = useAuth();
   const { pathname } = useLocation();
+  const { hasConflict } = useQueueConflict();
 
-  const navItem = (to, icon, label) => {
+  const navItem = (to, icon, label, warn = false) => {
     const active = pathname === to || (to !== '/queues' && pathname.startsWith(to));
     const queueActive = to === '/queues' && (pathname === '/queues' || pathname.startsWith('/queues/'));
     const isActive = queueActive || (to !== '/queues' && active);
     return (
       <Link
         to={to}
-        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
+        className={`relative flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
           isActive
             ? 'bg-primary-50 text-primary-700'
             : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
@@ -24,6 +26,14 @@ export default function Layout({ children, className = '' }) {
       >
         <span>{icon}</span>
         <span className="hidden sm:inline">{label}</span>
+        {warn && (
+          <span
+            className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none"
+            title="Existem filas com horários em conflito"
+          >
+            !
+          </span>
+        )}
       </Link>
     );
   };
@@ -37,7 +47,7 @@ export default function Layout({ children, className = '' }) {
           </Link>
           <nav className="flex items-center gap-1">
             {navItem('/queues',   '📋', 'Filas')}
-            {navItem('/calendar', '📅', 'Calendário')}
+            {navItem('/calendar', '📅', 'Calendário', hasConflict)}
           </nav>
           <div className="flex items-center gap-3 shrink-0">
             <span className="text-sm text-gray-500 hidden md:block">{user?.name}</span>

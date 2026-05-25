@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useQueueConflict } from '../contexts/QueueConflictContext';
 import { getQueues, createQueue, updateQueue, deleteQueue } from '../api/queuesApi';
 import Layout from '../components/Layout';
 
@@ -41,11 +42,13 @@ function weekDaysLabel(days) {
 function QueueModal({ queue, onClose, onSave }) {
   const isEditing = !!queue;
   const [form, setForm] = useState({
-    name:         queue?.name         ?? '',
-    description:  queue?.description  ?? '',
-    color:        queue?.color        ?? '#6366f1',
-    rotationType: queue?.rotationType ?? 'sequential',
-    weekDays:     queue?.weekDays     ?? [],
+    name:             queue?.name             ?? '',
+    description:      queue?.description      ?? '',
+    color:            queue?.color            ?? '#6366f1',
+    rotationType:     queue?.rotationType     ?? 'sequential',
+    weekDays:         queue?.weekDays         ?? [],
+    defaultStartTime: queue?.defaultStartTime ?? '',
+    defaultEndTime:   queue?.defaultEndTime   ?? '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
@@ -213,6 +216,37 @@ function QueueModal({ queue, onClose, onSave }) {
             </div>
           </div>
 
+          {/* ── Horário padrão (opcional) ── */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Horário padrão
+              <span className="text-gray-400 font-normal ml-1">(opcional)</span>
+            </label>
+            <p className="text-xs text-gray-400 mb-2">
+              Usado para detectar conflitos entre filas. Deixe em branco se não houver horário fixo.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Início</label>
+                <input
+                  type="time"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  value={form.defaultStartTime}
+                  onChange={e => set('defaultStartTime', e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Fim</label>
+                <input
+                  type="time"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  value={form.defaultEndTime}
+                  onChange={e => set('defaultEndTime', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -305,6 +339,7 @@ function QueueCard({ queue, onEdit, onDelete, onClick }) {
 export default function Queues() {
   const navigate  = useNavigate();
   const { user } = useAuth();
+  const { refresh: refreshConflict } = useQueueConflict();
 
   const [queues,     setQueues]     = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -331,12 +366,14 @@ export default function Queues() {
         ? prev.map(q => q.id === saved.id ? saved : q)
         : [saved, ...prev];
     });
+    refreshConflict();
   }
 
   async function handleDelete(queue) {
     try {
       await deleteQueue(queue.id);
       setQueues(prev => prev.filter(q => q.id !== queue.id));
+      refreshConflict();
     } catch {
       alert('Erro ao excluir fila.');
     } finally {

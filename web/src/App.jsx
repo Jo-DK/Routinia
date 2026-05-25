@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { QueueConflictProvider } from './contexts/QueueConflictContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import Login          from './pages/Login';
@@ -18,6 +19,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <QueueConflictProvider>
         <Routes>
           {/* Públicas */}
           <Route path="/login"          element={<Login />} />
@@ -33,6 +35,7 @@ export default function App() {
           <Route path="/"  element={<Navigate to="/queues" replace />} />
           <Route path="*"  element={<Navigate to="/queues" replace />} />
         </Routes>
+        </QueueConflictProvider>
       </AuthProvider>
     </BrowserRouter>
   );
