@@ -152,9 +152,8 @@ function TimeSlotCell({ dayOfWeek, slotIndex }) {
 // ── Componente: evento no calendário ─────────────────
 function CalendarEvent({ schedule, onDelete, onResized }) {
   const { queue }    = schedule;
-  const evStyle      = getEventStyle(schedule.startTime, schedule.endTime);
-  const [popup, setPopup] = useState(false);
-  const offDay = !isDayActive(queue, schedule.dayOfWeek);
+  const evStyle = getEventStyle(schedule.startTime, schedule.endTime);
+  const offDay  = !isDayActive(queue, schedule.dayOfWeek);
 
   // Drag para mover o evento
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -222,10 +221,19 @@ function CalendarEvent({ schedule, onDelete, onResized }) {
           outline: offDay ? '2px dashed rgba(255,255,255,0.7)' : 'none',
           outlineOffset: '-2px',
         }}
-        className="rounded-lg px-2 py-1 overflow-hidden cursor-grab active:cursor-grabbing select-none"
-        onClick={() => !isDragging && setPopup(p => !p)}
+        className="group rounded-lg px-2 py-1 overflow-hidden cursor-grab active:cursor-grabbing select-none"
       >
-        <div className="flex items-center gap-1">
+        {/* Botão ✕ — aparece no hover, remove direto */}
+        <button
+          onClick={e => { e.stopPropagation(); onDelete(schedule.id); }}
+          className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/25 hover:bg-black/50 text-white
+                     flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
+          title="Remover do calendário"
+        >
+          <span className="text-[10px] leading-none font-bold">✕</span>
+        </button>
+
+        <div className="flex items-center gap-1 pr-4">
           {offDay && <span title="Fora dos dias ativos desta fila" className="text-white text-[10px] leading-none">⚠️</span>}
           <p className="text-white text-xs font-semibold truncate leading-tight">{queue?.name}</p>
         </div>
@@ -241,28 +249,6 @@ function CalendarEvent({ schedule, onDelete, onResized }) {
           <div className="w-6 h-0.5 bg-white/50 rounded-full" />
         </div>
       </div>
-
-      {/* Popup de ações */}
-      {popup && !isDragging && (
-        <div
-          style={{ position: 'absolute', top: evStyle.top, left: 4, zIndex: 50 }}
-          className="bg-white rounded-xl shadow-xl border border-gray-200 p-3 w-44"
-        >
-          <p className="font-semibold text-sm text-gray-800 mb-0.5">{queue?.name}</p>
-          <p className="text-xs text-gray-400 mb-3">
-            {DAYS_BR[schedule.dayOfWeek]} · {schedule.startTime}–{schedule.endTime}
-          </p>
-          <button
-            onClick={() => { setPopup(false); onDelete(schedule.id); }}
-            className="w-full text-left text-xs text-red-500 hover:text-red-700 font-medium"
-          >
-            🗑 Remover do calendário
-          </button>
-          <button onClick={() => setPopup(false)} className="w-full text-left text-xs text-gray-400 mt-2">
-            Fechar
-          </button>
-        </div>
-      )}
     </>
   );
 }
