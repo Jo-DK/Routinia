@@ -461,7 +461,32 @@ export default function Calendar() {
       const { data } = await api.put(`/schedules/${scheduleId}`, {
         dayOfWeek, startTime, endTime: newEndTime,
       });
+
+      const queueId = data.schedule.queue?.id;
+
+      // 1. Actualiza o schedule redimensionado no estado local
       setSchedules(prev => prev.map(s => s.id === scheduleId ? data.schedule : s));
+
+      if (queueId) {
+        // 2. Persiste os novos horários como defaults da fila (o backend também
+        //    faz updateMany nos outros schedules da mesma fila via queueService)
+        await api.put(`/queues/${queueId}`, {
+          defaultStartTime: startTime,
+          defaultEndTime:   newEndTime,
+        });
+
+        // 3. Actualiza o estado local: queue defaults + todos os outros schedules
+        setQueues(prev => prev.map(q =>
+          q.id === queueId
+            ? { ...q, defaultStartTime: startTime, defaultEndTime: newEndTime }
+            : q
+        ));
+        setSchedules(prev => prev.map(s =>
+          s.queue?.id === queueId
+            ? { ...s, startTime, endTime: newEndTime }
+            : s
+        ));
+      }
     } catch (e) {
       const msg = e.response?.data?.error ?? 'Erro ao redimensionar.';
       alert(msg);

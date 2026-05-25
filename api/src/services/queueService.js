@@ -84,7 +84,10 @@ async function updateQueue(userId, queueId, { name, description, color, rotation
   const queue = await prisma.queue.findFirst({ where: { id: queueId, userId } });
   if (!queue) throw new Error('QUEUE_NOT_FOUND');
 
-  return prisma.queue.update({
+  const newStart = defaultStartTime !== undefined ? (defaultStartTime || null) : undefined;
+  const newEnd   = defaultEndTime   !== undefined ? (defaultEndTime   || null) : undefined;
+
+  const updated = await prisma.queue.update({
     where: { id: queueId },
     data: {
       name,
@@ -92,12 +95,24 @@ async function updateQueue(userId, queueId, { name, description, color, rotation
       color,
       rotationType,
       ...(Array.isArray(weekDays) ? { weekDays } : {}),
-      // undefined = não altera; null = limpa; string = actualiza
-      ...(defaultStartTime !== undefined ? { defaultStartTime: defaultStartTime || null } : {}),
-      ...(defaultEndTime   !== undefined ? { defaultEndTime:   defaultEndTime   || null } : {}),
+      ...(newStart !== undefined ? { defaultStartTime: newStart } : {}),
+      ...(newEnd   !== undefined ? { defaultEndTime:   newEnd   } : {}),
     },
     include: { tasks: { orderBy: { order: 'asc' } } },
   });
+
+  // Se ambos os horários estão definidos, sincroniza todos os schedules da fila.
+  // Isso garante que alterar o modal reflecte no calendário e vice-versa.
+  const finalStart = newStart ?? queue.defaultStartTime;
+  const finalEnd   = newEnd   ?? queue.defaultEndTime;
+  if (finalStart && finalEnd) {
+    await prisma.schedule.updateMany({
+      where: { queueId, userId },
+      data: { startTime: finalStart, endTime: finalEnd },
+    });
+  }
+
+  return updated;
 }
 
 /**
