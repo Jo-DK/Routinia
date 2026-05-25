@@ -7,7 +7,7 @@
 //      fila, dia e horário
 //   3. Toque em um agendamento: opção de remover
 // =====================================================
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   Modal, Alert, ActivityIndicator,
@@ -47,9 +47,17 @@ function ScheduleModal({ visible, queues, onClose, onSave }) {
   const [endTime,   setEndTime]   = useState('09:00');
   const [loading,   setLoading]   = useState(false);
 
-  // Fila seleccionada — usada para ler weekDays
+  // Fila seleccionada — usada para ler weekDays e horário padrão
   const selectedQueue = queues.find(q => q.id === queueId);
   const hasWeekDays   = selectedQueue?.weekDays?.length > 0;
+
+  // Pré-preenche os horários com os defaults da fila quando muda a selecção
+  useEffect(() => {
+    if (selectedQueue?.defaultStartTime) setStartTime(selectedQueue.defaultStartTime);
+    else setStartTime('08:00');
+    if (selectedQueue?.defaultEndTime)   setEndTime(selectedQueue.defaultEndTime);
+    else setEndTime('09:00');
+  }, [queueId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSave() {
     if (!queueId) { Alert.alert('Erro', 'Selecione uma fila'); return; }

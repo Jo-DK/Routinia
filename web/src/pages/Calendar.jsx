@@ -123,6 +123,13 @@ function DraggableQueueCard({ queue }) {
           );
         })}
       </div>
+
+      {/* Horário padrão */}
+      {queue.defaultStartTime && queue.defaultEndTime && (
+        <p className="text-[10px] text-gray-400 pl-5 mt-1.5 font-medium tabular-nums">
+          🕐 {queue.defaultStartTime} – {queue.defaultEndTime}
+        </p>
+      )}
     </div>
   );
 }
@@ -259,13 +266,18 @@ function DragPreview({ activeDrag }) {
 
   if (activeDrag.type === 'queue') {
     const { queue } = activeDrag;
+    const hasTimes = queue.defaultStartTime && queue.defaultEndTime;
     return (
       <div
         style={{ backgroundColor: queue.color }}
         className="rounded-lg px-3 py-2 opacity-90 shadow-lg w-36"
       >
         <p className="text-white text-xs font-semibold">{queue.name}</p>
-        <p className="text-white/70 text-xs">Solte para agendar</p>
+        <p className="text-white/70 text-xs tabular-nums">
+          {hasTimes
+            ? `${queue.defaultStartTime} – ${queue.defaultEndTime}`
+            : 'Solte para agendar'}
+        </p>
       </div>
     );
   }
@@ -375,19 +387,23 @@ export default function Calendar() {
     const startTime = `${String(slot.hour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`;
 
     if (dragged.type === 'queue') {
-      const queue   = dragged.queue;
-      const endHour = slot.hour + 1 >= END_HOUR ? END_HOUR - 1 : slot.hour + 1;
-      const endTime = `${String(endHour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`;
+      const queue = dragged.queue;
 
-      // Se a fila tem dias ativos definidos, expande para todos eles;
-      // caso contrário (sem restrição), cria só no dia onde soltou.
+      // Horário: usa o padrão da fila se existir; senão usa o slot do drop + 1 h
+      const finalStart = queue.defaultStartTime ?? startTime;
+      const finalEnd   = queue.defaultEndTime   ?? (() => {
+        const endHour = slot.hour + 1 >= END_HOUR ? END_HOUR - 1 : slot.hour + 1;
+        return `${String(endHour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`;
+      })();
+
+      // Dias: expande para todos os weekDays ou só o dia do drop
       const targetDays = queue.weekDays?.length > 0
         ? queue.weekDays
         : [slot.dayOfWeek];
 
       const results = await Promise.allSettled(
         targetDays.map(day =>
-          api.post('/schedules', { queueId: queue.id, dayOfWeek: day, startTime, endTime })
+          api.post('/schedules', { queueId: queue.id, dayOfWeek: day, startTime: finalStart, endTime: finalEnd })
         )
       );
 
