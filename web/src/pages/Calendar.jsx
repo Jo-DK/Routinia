@@ -261,11 +261,12 @@ function CalendarEvent({ schedule, onDelete, onResized }) {
 }
 
 // ── Componente: preview do item sendo arrastado ───────
-function DragPreview({ activeDrag }) {
+function DragPreview({ activeDrag, queues }) {
   if (!activeDrag) return null;
 
   if (activeDrag.type === 'queue') {
-    const { queue } = activeDrag;
+    // Usa a state para garantir dados frescos (defaultStartTime/defaultEndTime)
+    const queue    = queues.find(q => q.id === activeDrag.queue.id) ?? activeDrag.queue;
     const hasTimes = queue.defaultStartTime && queue.defaultEndTime;
     return (
       <div
@@ -387,11 +388,13 @@ export default function Calendar() {
     const startTime = `${String(slot.hour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`;
 
     if (dragged.type === 'queue') {
-      const queue = dragged.queue;
+      // Busca sempre da state (fonte de verdade) para garantir que
+      // defaultStartTime/defaultEndTime estão actualizados.
+      const queue = queues.find(q => q.id === dragged.queue.id) ?? dragged.queue;
 
       // Horário: usa o padrão da fila se existir; senão usa o slot do drop + 1 h
-      const finalStart = queue.defaultStartTime ?? startTime;
-      const finalEnd   = queue.defaultEndTime   ?? (() => {
+      const finalStart = queue.defaultStartTime || startTime;
+      const finalEnd   = queue.defaultEndTime   || (() => {
         const endHour = slot.hour + 1 >= END_HOUR ? END_HOUR - 1 : slot.hour + 1;
         return `${String(endHour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`;
       })();
@@ -558,7 +561,7 @@ export default function Calendar() {
 
         {/* Preview flutuante do item arrastado */}
         <DragOverlay dropAnimation={null}>
-          <DragPreview activeDrag={activeDrag} />
+          <DragPreview activeDrag={activeDrag} queues={queues} />
         </DragOverlay>
       </DndContext>
     </Layout>
