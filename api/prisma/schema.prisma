@@ -38,6 +38,10 @@ model Queue {
   color            String   @default("#6366f1")
   rotationType     String   @default("sequential")
   currentTaskIndex Int      @default(0)
+  // Escopo semanal: quais dias da semana a fila está ativa.
+  // 0=Segunda, 1=Terça, 2=Quarta, 3=Quinta, 4=Sexta, 5=Sábado, 6=Domingo
+  // Array vazio [] significa sem restrição (todo dia).
+  weekDays         Int[]    @default([])
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 

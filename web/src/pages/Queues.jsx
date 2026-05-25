@@ -19,6 +19,24 @@ const COLORS = [
   { label: 'Ciano',    value: '#06b6d4' },
 ];
 
+// Dias da semana — 0=Seg … 6=Dom
+const DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+// Atalhos de seleção rápida
+const DAY_PRESETS = [
+  { label: 'Todo dia',       days: [] },
+  { label: 'Seg – Sex',      days: [0, 1, 2, 3, 4] },
+  { label: 'Fins de semana', days: [5, 6] },
+];
+
+// Converte array de índices em texto legível
+function weekDaysLabel(days) {
+  if (!days || days.length === 0) return 'Todo dia';
+  if (days.length === 7) return 'Todo dia';
+  if (JSON.stringify([...days].sort((a,b)=>a-b)) === '[0,1,2,3,4]') return 'Seg – Sex';
+  return days.map(d => DAYS[d]).join(' · ');
+}
+
 // ── Modal de criar / editar fila ──────────────────────
 function QueueModal({ queue, onClose, onSave }) {
   const isEditing = !!queue;
@@ -27,12 +45,28 @@ function QueueModal({ queue, onClose, onSave }) {
     description:  queue?.description  ?? '',
     color:        queue?.color        ?? '#6366f1',
     rotationType: queue?.rotationType ?? 'sequential',
+    weekDays:     queue?.weekDays     ?? [],
   });
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState('');
 
   function set(field, value) {
     setForm(f => ({ ...f, [field]: value }));
+  }
+
+  function toggleDay(index) {
+    setForm(f => {
+      const days = f.weekDays.includes(index)
+        ? f.weekDays.filter(d => d !== index)
+        : [...f.weekDays, index].sort((a, b) => a - b);
+      return { ...f, weekDays: days };
+    });
+  }
+
+  function isPresetActive(presetDays) {
+    const a = JSON.stringify([...presetDays].sort((a,b)=>a-b));
+    const b = JSON.stringify([...form.weekDays].sort((a,b)=>a-b));
+    return a === b;
   }
 
   async function handleSubmit(e) {
@@ -105,6 +139,56 @@ function QueueModal({ queue, onClose, onSave }) {
             </div>
           </div>
 
+          {/* ── Dias da semana ── */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Dias da semana</label>
+
+            {/* Atalhos rápidos */}
+            <div className="flex gap-2 mb-3">
+              {DAY_PRESETS.map(p => (
+                <button
+                  key={p.label}
+                  type="button"
+                  onClick={() => set('weekDays', p.days)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 transition ${
+                    isPresetActive(p.days)
+                      ? 'border-primary-500 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Seletor individual */}
+            <div className="flex gap-2 flex-wrap">
+              {DAYS.map((label, i) => {
+                const active = form.weekDays.includes(i);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => toggleDay(i)}
+                    className={`w-10 h-10 rounded-full text-xs font-semibold border-2 transition ${
+                      active
+                        ? 'border-primary-500 bg-primary-500 text-white'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-400'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-gray-400 mt-2">
+              {form.weekDays.length === 0
+                ? '✅ Ativa todos os dias'
+                : `📅 Ativa: ${form.weekDays.map(d => DAYS[d]).join(', ')}`}
+            </p>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de rotação</label>
             <div className="grid grid-cols-2 gap-3">
@@ -154,6 +238,7 @@ function QueueModal({ queue, onClose, onSave }) {
 // ── Card de fila ──────────────────────────────────────
 function QueueCard({ queue, onEdit, onDelete, onClick }) {
   const rotationLabel = queue.rotationType === 'sequential' ? '🔄 Automática' : '✋ Manual';
+  const daysLabel = weekDaysLabel(queue.weekDays);
 
   return (
     <div
@@ -166,7 +251,15 @@ function QueueCard({ queue, onEdit, onDelete, onClick }) {
       <div className="p-5">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-800 truncate">{queue.name}</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-gray-800 truncate">{queue.name}</h3>
+              <span
+                className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
+                style={{ backgroundColor: queue.color + '22', color: queue.color }}
+              >
+                {daysLabel}
+              </span>
+            </div>
             {queue.description && (
               <p className="text-gray-500 text-sm mt-0.5 truncate">{queue.description}</p>
             )}

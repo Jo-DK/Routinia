@@ -13,6 +13,25 @@ const COLORS = [
   '#f97316', '#22c55e', '#3b82f6', '#06b6d4',
 ];
 
+// Abreviações dos dias (0=Seg … 6=Dom)
+const DAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+// Converte array de índices em texto legível (ex: "Seg · Ter · Qua")
+function weekDaysLabel(days) {
+  if (!days || days.length === 0) return 'Todo dia';
+  if (days.length === 7) return 'Todo dia';
+  if (JSON.stringify([...days].sort()) === '[0,1,2,3,4]') return 'Seg – Sex';
+  if (JSON.stringify([...days].sort()) === '[0,1,2,3,4,5,6]') return 'Todo dia';
+  return days.map(d => DAYS[d]).join(' · ');
+}
+
+// ── Atalhos de dias predefinidos ──────────────────────
+const DAY_PRESETS = [
+  { label: 'Todo dia',  days: [] },
+  { label: 'Seg – Sex', days: [0, 1, 2, 3, 4] },
+  { label: 'Fins de semana', days: [5, 6] },
+];
+
 // ── Modal criar/editar fila ───────────────────────────
 function QueueModal({ visible, queue, onClose, onSave }) {
   const isEditing = !!queue;
@@ -20,6 +39,7 @@ function QueueModal({ visible, queue, onClose, onSave }) {
   const [description,  setDescription]  = useState('');
   const [color,        setColor]        = useState('#6366f1');
   const [rotationType, setRotationType] = useState('sequential');
+  const [weekDays,     setWeekDays]     = useState([]); // [] = todo dia
   const [loading,      setLoading]      = useState(false);
 
   // Preenche o form quando abre para edição
@@ -29,16 +49,32 @@ function QueueModal({ visible, queue, onClose, onSave }) {
       setDescription(queue.description ?? '');
       setColor(queue.color);
       setRotationType(queue.rotationType);
+      setWeekDays(queue.weekDays ?? []);
     } else {
-      setName(''); setDescription(''); setColor('#6366f1'); setRotationType('sequential');
+      setName(''); setDescription(''); setColor('#6366f1');
+      setRotationType('sequential'); setWeekDays([]);
     }
   }, [queue, visible]);
+
+  // Alterna um dia no array
+  function toggleDay(index) {
+    setWeekDays(prev =>
+      prev.includes(index) ? prev.filter(d => d !== index) : [...prev, index].sort((a, b) => a - b)
+    );
+  }
+
+  // Verifica se um preset está ativo
+  function isPresetActive(presetDays) {
+    const sorted = [...presetDays].sort((a, b) => a - b);
+    const current = [...weekDays].sort((a, b) => a - b);
+    return JSON.stringify(sorted) === JSON.stringify(current);
+  }
 
   async function handleSave() {
     if (!name.trim()) { Alert.alert('Erro', 'Nome é obrigatório'); return; }
     setLoading(true);
     try {
-      const payload = { name, description, color, rotationType };
+      const payload = { name, description, color, rotationType, weekDays };
       const res = isEditing
         ? await api.put(`/queues/${queue.id}`, payload)
         : await api.post('/queues', payload);
@@ -95,6 +131,48 @@ function QueueModal({ visible, queue, onClose, onSave }) {
             ))}
           </View>
 
+          {/* ── Escopo semanal ── */}
+          <Text style={styles.fieldLabel}>Dias da semana</Text>
+
+          {/* Atalhos rápidos */}
+          <View style={styles.presetsRow}>
+            {DAY_PRESETS.map(p => (
+              <TouchableOpacity
+                key={p.label}
+                onPress={() => setWeekDays(p.days)}
+                style={[styles.presetChip, isPresetActive(p.days) && styles.presetChipActive]}
+              >
+                <Text style={[styles.presetChipText, isPresetActive(p.days) && styles.presetChipTextActive]}>
+                  {p.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Seletor individual por dia */}
+          <View style={styles.daysRow}>
+            {DAYS.map((label, i) => {
+              const active = weekDays.includes(i);
+              return (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => toggleDay(i)}
+                  style={[styles.dayChip, active && styles.dayChipActive]}
+                >
+                  <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.weekDaysSummary}>
+            {weekDays.length === 0
+              ? '✅ Ativa todos os dias'
+              : `📅 Ativa: ${weekDays.map(d => DAYS[d]).join(', ')}`}
+          </Text>
+
           <Text style={styles.fieldLabel}>Tipo de rotação</Text>
           {[
             { value: 'sequential', label: '🔄 Automática', desc: 'Avança sozinha a cada execução' },
@@ -117,14 +195,27 @@ function QueueModal({ visible, queue, onClose, onSave }) {
 
 // ── Card de fila ──────────────────────────────────────
 function QueueCard({ queue, onPress, onEdit, onDelete }) {
+  const daysLabel = weekDaysLabel(queue.weekDays);
+  const isAllDays = !queue.weekDays || queue.weekDays.length === 0;
+
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.8}>
       <View style={[styles.cardStripe, { backgroundColor: queue.color }]} />
       <View style={styles.cardBody}>
-        <Text style={styles.cardName} numberOfLines={1}>{queue.name}</Text>
+        {/* Nome + badge de dias */}
+        <View style={styles.cardTitleRow}>
+          <Text style={styles.cardName} numberOfLines={1}>{queue.name}</Text>
+          <View style={[styles.daysBadge, { backgroundColor: queue.color + '22' }]}>
+            <Text style={[styles.daysBadgeText, { color: queue.color }]}>
+              {isAllDays ? 'Todo dia' : daysLabel}
+            </Text>
+          </View>
+        </View>
+
         {queue.description ? (
           <Text style={styles.cardDesc} numberOfLines={1}>{queue.description}</Text>
         ) : null}
+
         {queue.currentTask ? (
           <View style={styles.currentTaskBox}>
             <Text style={styles.currentTaskLabel}>Tarefa atual</Text>
@@ -135,6 +226,7 @@ function QueueCard({ queue, onPress, onEdit, onDelete }) {
             <Text style={styles.currentTaskLabel}>Nenhuma tarefa ainda</Text>
           </View>
         )}
+
         <View style={styles.cardFooter}>
           <Text style={styles.cardMeta}>{queue.taskCount} tarefa{queue.taskCount !== 1 ? 's' : ''}</Text>
           <View style={styles.cardActions}>
@@ -276,7 +368,10 @@ const styles = StyleSheet.create({
   card:            { backgroundColor: 'white', borderRadius: 16, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
   cardStripe:      { height: 6 },
   cardBody:        { padding: 14 },
-  cardName:        { fontSize: 16, fontWeight: '600', color: '#1f2937' },
+  cardTitleRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  cardName:        { fontSize: 16, fontWeight: '600', color: '#1f2937', flex: 1 },
+  daysBadge:       { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+  daysBadgeText:   { fontSize: 11, fontWeight: '600' },
   cardDesc:        { fontSize: 13, color: '#9ca3af', marginTop: 2 },
   currentTaskBox:  { backgroundColor: '#f9fafb', borderRadius: 8, padding: 10, marginTop: 10 },
   currentTaskLabel:{ fontSize: 11, color: '#9ca3af', marginBottom: 2 },
@@ -297,8 +392,20 @@ const styles = StyleSheet.create({
   colorRow:        { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   colorCircle:     { width: 32, height: 32, borderRadius: 16 },
   colorSelected:   { transform: [{ scale: 1.25 }], borderWidth: 2.5, borderColor: 'white', elevation: 3 },
-  rotationOption:  { borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 12, padding: 14, marginBottom: 8 },
-  rotationSelected:{ borderColor: '#4f46e5', backgroundColor: '#eef2ff' },
-  rotationLabel:   { fontSize: 14, fontWeight: '600', color: '#1f2937' },
-  rotationDesc:    { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  rotationOption:   { borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 12, padding: 14, marginBottom: 8 },
+  rotationSelected: { borderColor: '#4f46e5', backgroundColor: '#eef2ff' },
+  rotationLabel:    { fontSize: 14, fontWeight: '600', color: '#1f2937' },
+  rotationDesc:     { fontSize: 12, color: '#9ca3af', marginTop: 2 },
+  // Dias da semana
+  presetsRow:       { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  presetChip:       { borderWidth: 1.5, borderColor: '#e5e7eb', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6 },
+  presetChipActive: { borderColor: '#4f46e5', backgroundColor: '#eef2ff' },
+  presetChipText:   { fontSize: 13, color: '#6b7280' },
+  presetChipTextActive: { color: '#4f46e5', fontWeight: '600' },
+  daysRow:          { flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 10 },
+  dayChip:          { width: 44, height: 44, borderRadius: 22, borderWidth: 1.5, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' },
+  dayChipActive:    { borderColor: '#4f46e5', backgroundColor: '#4f46e5' },
+  dayChipText:      { fontSize: 11, fontWeight: '600', color: '#6b7280' },
+  dayChipTextActive:{ color: 'white' },
+  weekDaysSummary:  { fontSize: 12, color: '#9ca3af', marginBottom: 4, marginTop: 2 },
 });

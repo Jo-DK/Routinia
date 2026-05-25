@@ -57,14 +57,17 @@ async function getQueue(userId, queueId) {
 
 /**
  * Cria uma nova fila.
+ * weekDays: array de inteiros 0–6 (0=Seg, 6=Dom).
+ * Array vazio [] = sem restrição de dias (ativa todo dia).
  */
-async function createQueue(userId, { name, description, color, rotationType }) {
+async function createQueue(userId, { name, description, color, rotationType, weekDays }) {
   return prisma.queue.create({
     data: {
       name,
       description: description || null,
       color: color || '#6366f1',
       rotationType: rotationType || 'sequential',
+      weekDays: Array.isArray(weekDays) ? weekDays : [],
       userId,
     },
     include: { tasks: true },
@@ -73,14 +76,21 @@ async function createQueue(userId, { name, description, color, rotationType }) {
 
 /**
  * Atualiza uma fila existente.
+ * weekDays: array de inteiros 0–6. undefined = não altera; [] = sem restrição.
  */
-async function updateQueue(userId, queueId, { name, description, color, rotationType }) {
+async function updateQueue(userId, queueId, { name, description, color, rotationType, weekDays }) {
   const queue = await prisma.queue.findFirst({ where: { id: queueId, userId } });
   if (!queue) throw new Error('QUEUE_NOT_FOUND');
 
   return prisma.queue.update({
     where: { id: queueId },
-    data: { name, description, color, rotationType },
+    data: {
+      name,
+      description,
+      color,
+      rotationType,
+      ...(Array.isArray(weekDays) ? { weekDays } : {}),
+    },
     include: { tasks: { orderBy: { order: 'asc' } } },
   });
 }
