@@ -32,8 +32,15 @@ const HOUR_HEIGHT = SLOT_HEIGHT * 2; // 96px por hora
 const TOTAL_SLOTS = (END_HOUR - START_HOUR) * 2; // 34 slots
 const TOTAL_HEIGHT = TOTAL_SLOTS * SLOT_HEIGHT;   // 1632px
 
-const DAYS_BR = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+const DAYS_BR    = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 const DAYS_SHORT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+// Retorna true se o dia está ativo para a fila
+// weekDays vazio = sem restrição (todo dia é válido)
+function isDayActive(queue, dayIndex) {
+  if (!queue?.weekDays || queue.weekDays.length === 0) return true;
+  return queue.weekDays.includes(dayIndex);
+}
 
 // ── Helpers de tempo ──────────────────────────────────
 function timeToMinutes(t) {
@@ -74,7 +81,8 @@ function DraggableQueueCard({ queue }) {
     data: { type: 'queue', queue },
   });
 
-  const currentTask = queue.tasks?.[queue.currentTaskIndex] ?? queue.tasks?.[0];
+  const currentTask  = queue.tasks?.[queue.currentTaskIndex] ?? queue.tasks?.[0];
+  const hasRestriction = queue.weekDays?.length > 0;
 
   return (
     <div
@@ -94,6 +102,27 @@ function DraggableQueueCard({ queue }) {
       <p className="text-xs text-gray-300 pl-5 mt-0.5">
         {queue.tasks?.length ?? 0} tarefa{queue.tasks?.length !== 1 ? 's' : ''}
       </p>
+
+      {/* Indicador de dias ativos */}
+      <div className="flex gap-0.5 mt-2 pl-5">
+        {DAYS_SHORT.map((label, i) => {
+          const active = isDayActive(queue, i);
+          return (
+            <span
+              key={i}
+              title={DAYS_BR[i]}
+              className={`text-[9px] font-bold w-5 h-5 flex items-center justify-center rounded-full transition-colors ${
+                active
+                  ? 'text-white'
+                  : 'text-gray-300 bg-gray-100'
+              }`}
+              style={active ? { backgroundColor: queue.color } : {}}
+            >
+              {label[0]}
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -125,6 +154,7 @@ function CalendarEvent({ schedule, onDelete, onResized }) {
   const { queue }    = schedule;
   const evStyle      = getEventStyle(schedule.startTime, schedule.endTime);
   const [popup, setPopup] = useState(false);
+  const offDay = !isDayActive(queue, schedule.dayOfWeek);
 
   // Drag para mover o evento
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -186,14 +216,19 @@ function CalendarEvent({ schedule, onDelete, onResized }) {
           top: evStyle.top,
           height: isDragging ? evStyle.height : resizeH,
           backgroundColor: queue?.color ?? '#6366f1',
-          opacity: isDragging ? 0.3 : 0.92,
+          opacity: isDragging ? 0.3 : offDay ? 0.55 : 0.92,
           transform: CSS.Transform.toString(transform),
           zIndex: isDragging ? 0 : 10,
+          outline: offDay ? '2px dashed rgba(255,255,255,0.7)' : 'none',
+          outlineOffset: '-2px',
         }}
         className="rounded-lg px-2 py-1 overflow-hidden cursor-grab active:cursor-grabbing select-none"
         onClick={() => !isDragging && setPopup(p => !p)}
       >
-        <p className="text-white text-xs font-semibold truncate leading-tight">{queue?.name}</p>
+        <div className="flex items-center gap-1">
+          {offDay && <span title="Fora dos dias ativos desta fila" className="text-white text-[10px] leading-none">⚠️</span>}
+          <p className="text-white text-xs font-semibold truncate leading-tight">{queue?.name}</p>
+        </div>
         <p className="text-white/75 text-xs truncate">
           {schedule.startTime} – {schedule.endTime}
         </p>
@@ -265,9 +300,28 @@ function DragPreview({ activeDrag }) {
 }
 
 // ── Coluna de um dia ──────────────────────────────────
-function DayColumn({ dayOfWeek, schedules, onDelete, onResized }) {
+function DayColumn({ dayOfWeek, schedules, onDelete, onResized, activeDrag }) {
+  // Durante o drag de uma fila, indica se este dia é válido para ela
+  const draggingQueue = activeDrag?.type === 'queue' ? activeDrag.queue : null;
+  const isValid   = !draggingQueue || isDayActive(draggingQueue, dayOfWeek);
+  const isDraggingQueue = !!draggingQueue;
+
   return (
-    <div className="relative border-l border-gray-200" style={{ minWidth: 0 }}>
+    <div
+      className={`relative border-l border-gray-200 transition-colors duration-150 ${
+        isDraggingQueue && !isValid ? 'bg-gray-100/80' : ''
+      }`}
+      style={{ minWidth: 0 }}
+    >
+      {/* Faixa de "dia inválido" durante o drag */}
+      {isDraggingQueue && !isValid && (
+        <div className="absolute inset-0 pointer-events-none z-20 flex items-start justify-center pt-3">
+          <span className="text-[10px] text-gray-400 font-medium bg-gray-200/80 rounded-full px-2 py-0.5 select-none">
+            Inativo
+          </span>
+        </div>
+      )}
+
       {/* Slots (drop zones) */}
       <div>
         {Array.from({ length: TOTAL_SLOTS }, (_, i) => (
@@ -477,6 +531,7 @@ export default function Calendar() {
                     schedules={schedulesByDay[day]}
                     onDelete={handleDelete}
                     onResized={handleResized}
+                    activeDrag={activeDrag}
                   />
                 </div>
               ))}
