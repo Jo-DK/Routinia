@@ -20,6 +20,13 @@ import api from '../api/axios';
 const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
 const DAYS_SHORT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
+// Retorna true se o dia está ativo para a fila
+// weekDays vazio = sem restrição (todo dia é válido)
+function isDayActive(queue, dayIndex) {
+  if (!queue?.weekDays || queue.weekDays.length === 0) return true;
+  return queue.weekDays.includes(dayIndex);
+}
+
 // Gera opções de horário de 06:00 a 22:30 em intervalos de 30min
 function generateTimeOptions() {
   const times = [];
@@ -40,16 +47,49 @@ function ScheduleModal({ visible, queues, onClose, onSave }) {
   const [endTime,   setEndTime]   = useState('09:00');
   const [loading,   setLoading]   = useState(false);
 
+  // Fila seleccionada — usada para ler weekDays
+  const selectedQueue = queues.find(q => q.id === queueId);
+  const hasWeekDays   = selectedQueue?.weekDays?.length > 0;
+
   async function handleSave() {
     if (!queueId) { Alert.alert('Erro', 'Selecione uma fila'); return; }
     if (startTime >= endTime) { Alert.alert('Erro', 'Horário de fim deve ser após o início'); return; }
+
     setLoading(true);
+
+    // Se a fila tem dias definidos, cria um schedule para cada um deles;
+    // caso contrário, cria só no dia seleccionado.
+    const targetDays = hasWeekDays ? selectedQueue.weekDays : [dayOfWeek];
+
     try {
-      const { data } = await api.post('/schedules', { queueId, dayOfWeek, startTime, endTime });
-      onSave(data.schedule);
+      const results = await Promise.allSettled(
+        targetDays.map(day =>
+          api.post('/schedules', { queueId, dayOfWeek: day, startTime, endTime })
+        )
+      );
+
+      const created = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => r.value.data.schedule);
+
+      const skipped = results.filter(r => r.status === 'rejected').length;
+
+      if (created.length === 0) {
+        Alert.alert('Conflito de horário', 'Não foi possível agendar: conflito em todos os dias.');
+        return;
+      }
+
+      onSave(created);
       onClose();
+
+      if (skipped > 0) {
+        Alert.alert(
+          'Agendado parcialmente',
+          `Criado em ${created.length} dia(s). ${skipped} dia(s) ignorado(s) por conflito de horário.`
+        );
+      }
     } catch (e) {
-      Alert.alert('Erro', e.response?.data?.error ?? 'Não foi possível agendar.');
+      Alert.alert('Erro', 'Não foi possível agendar.');
     } finally {
       setLoading(false);
     }
@@ -74,12 +114,28 @@ function ScheduleModal({ visible, queues, onClose, onSave }) {
             </Picker>
           </View>
 
-          <Text style={m.label}>Dia da semana</Text>
-          <View style={m.pickerWrap}>
-            <Picker selectedValue={dayOfWeek} onValueChange={v => setDayOfWeek(Number(v))}>
-              {DAYS.map((d, i) => <Picker.Item key={i} label={d} value={i} />)}
-            </Picker>
-          </View>
+          {/* Resumo de dias ou picker de dia */}
+          {hasWeekDays ? (
+            <View style={m.weekDaysSummary}>
+              <Text style={m.weekDaysSummaryLabel}>📅 Será agendado em:</Text>
+              <View style={m.weekDaysPills}>
+                {selectedQueue.weekDays.map(d => (
+                  <View key={d} style={[m.pill, { backgroundColor: selectedQueue.color + '22' }]}>
+                    <Text style={[m.pillText, { color: selectedQueue.color }]}>{DAYS_SHORT[d]}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          ) : (
+            <>
+              <Text style={m.label}>Dia da semana</Text>
+              <View style={m.pickerWrap}>
+                <Picker selectedValue={dayOfWeek} onValueChange={v => setDayOfWeek(Number(v))}>
+                  {DAYS.map((d, i) => <Picker.Item key={i} label={d} value={i} />)}
+                </Picker>
+              </View>
+            </>
+          )}
 
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <View style={{ flex: 1 }}>
@@ -106,14 +162,19 @@ function ScheduleModal({ visible, queues, onClose, onSave }) {
 }
 
 const m = StyleSheet.create({
-  container: { flex: 1, backgroundColor: 'white' },
-  header:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
-  title:     { fontSize: 16, fontWeight: '600', color: '#1f2937' },
-  cancel:    { fontSize: 15, color: '#9ca3af' },
-  save:      { fontSize: 15, fontWeight: '600', color: '#4f46e5' },
-  body:      { padding: 20 },
-  label:     { fontSize: 13, fontWeight: '500', color: '#374151', marginTop: 16, marginBottom: 4 },
-  pickerWrap:{ borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, overflow: 'hidden' },
+  container:        { flex: 1, backgroundColor: 'white' },
+  header:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#e5e7eb' },
+  title:            { fontSize: 16, fontWeight: '600', color: '#1f2937' },
+  cancel:           { fontSize: 15, color: '#9ca3af' },
+  save:             { fontSize: 15, fontWeight: '600', color: '#4f46e5' },
+  body:             { padding: 20 },
+  label:            { fontSize: 13, fontWeight: '500', color: '#374151', marginTop: 16, marginBottom: 4 },
+  pickerWrap:       { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, overflow: 'hidden' },
+  weekDaysSummary:  { marginTop: 16, padding: 12, backgroundColor: '#f9fafb', borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb' },
+  weekDaysSummaryLabel: { fontSize: 13, color: '#374151', fontWeight: '500', marginBottom: 8 },
+  weekDaysPills:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  pill:             { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  pillText:         { fontSize: 12, fontWeight: '600' },
 });
 
 // ── Tela principal ────────────────────────────────────
@@ -134,8 +195,9 @@ export default function CalendarScreen() {
     finally { setLoading(false); }
   }
 
-  function handleSaved(schedule) {
-    setSchedules(prev => [...prev, schedule]);
+  function handleSaved(created) {
+    // created é sempre um array (um ou mais schedules)
+    setSchedules(prev => [...prev, ...created]);
   }
 
   function handleDelete(schedule) {
@@ -201,26 +263,39 @@ export default function CalendarScreen() {
             {daySchedules.length === 0 ? (
               <Text style={styles.emptyDay}>Nenhum agendamento</Text>
             ) : (
-              daySchedules.map(s => (
-                <TouchableOpacity
-                  key={s.id}
-                  style={styles.scheduleCard}
-                  onPress={() => handleDelete(s)}
-                  activeOpacity={0.8}
-                >
-                  <View style={[styles.colorStripe, { backgroundColor: s.queue?.color ?? '#6366f1' }]} />
-                  <View style={styles.scheduleInfo}>
-                    <Text style={styles.scheduleName}>{s.queue?.name}</Text>
-                    <Text style={styles.scheduleTime}>{s.startTime} – {s.endTime}</Text>
-                    {s.queue?.tasks?.[s.queue?.currentTaskIndex] && (
-                      <Text style={styles.scheduleTask} numberOfLines={1}>
-                        ▶ {s.queue.tasks[s.queue.currentTaskIndex].name}
-                      </Text>
-                    )}
-                  </View>
-                  <Text style={styles.deleteHint}>Toque para remover</Text>
-                </TouchableOpacity>
-              ))
+              daySchedules.map(s => {
+                // Procura a fila completa (com weekDays) no array de filas
+                const fullQueue = queues.find(q => q.id === s.queue?.id);
+                const offDay    = !isDayActive(fullQueue, dayIndex);
+                return (
+                  <TouchableOpacity
+                    key={s.id}
+                    style={[styles.scheduleCard, offDay && styles.scheduleCardOffDay]}
+                    onPress={() => handleDelete(s)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.colorStripe, { backgroundColor: s.queue?.color ?? '#6366f1', opacity: offDay ? 0.4 : 1 }]} />
+                    <View style={styles.scheduleInfo}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                        {offDay && <Text style={styles.offDayIcon}>⚠️</Text>}
+                        <Text style={[styles.scheduleName, offDay && styles.scheduleNameOffDay]}>
+                          {s.queue?.name}
+                        </Text>
+                      </View>
+                      <Text style={styles.scheduleTime}>{s.startTime} – {s.endTime}</Text>
+                      {offDay && (
+                        <Text style={styles.offDayHint}>Fora dos dias activos desta fila</Text>
+                      )}
+                      {!offDay && s.queue?.tasks?.[s.queue?.currentTaskIndex] && (
+                        <Text style={styles.scheduleTask} numberOfLines={1}>
+                          ▶ {s.queue.tasks[s.queue.currentTaskIndex].name}
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.deleteHint}>Toque para remover</Text>
+                  </TouchableOpacity>
+                );
+              })
             )}
           </View>
         ))}
@@ -259,13 +334,17 @@ const styles = StyleSheet.create({
   todayBadge:      { backgroundColor: '#eef2ff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 },
   todayBadgeText:  { fontSize: 11, color: '#4f46e5', fontWeight: '600' },
   emptyDay:        { fontSize: 13, color: '#d1d5db', marginBottom: 4, paddingLeft: 4 },
-  scheduleCard:    { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, marginBottom: 6, overflow: 'hidden', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
-  colorStripe:     { width: 4, alignSelf: 'stretch' },
-  scheduleInfo:    { flex: 1, padding: 12 },
-  scheduleName:    { fontSize: 14, fontWeight: '600', color: '#1f2937' },
-  scheduleTime:    { fontSize: 12, color: '#6b7280', marginTop: 2 },
-  scheduleTask:    { fontSize: 12, color: '#9ca3af', marginTop: 4, fontStyle: 'italic' },
-  deleteHint:      { fontSize: 10, color: '#d1d5db', paddingRight: 10 },
+  scheduleCard:        { flexDirection: 'row', alignItems: 'center', backgroundColor: 'white', borderRadius: 12, marginBottom: 6, overflow: 'hidden', elevation: 1, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
+  scheduleCardOffDay:  { opacity: 0.6, borderWidth: 1.5, borderColor: '#fbbf24', borderStyle: 'dashed' },
+  colorStripe:         { width: 4, alignSelf: 'stretch' },
+  scheduleInfo:        { flex: 1, padding: 12 },
+  scheduleName:        { fontSize: 14, fontWeight: '600', color: '#1f2937' },
+  scheduleNameOffDay:  { color: '#9ca3af' },
+  offDayIcon:          { fontSize: 12 },
+  offDayHint:          { fontSize: 11, color: '#f59e0b', marginTop: 2 },
+  scheduleTime:        { fontSize: 12, color: '#6b7280', marginTop: 2 },
+  scheduleTask:        { fontSize: 12, color: '#9ca3af', marginTop: 4, fontStyle: 'italic' },
+  deleteHint:          { fontSize: 10, color: '#d1d5db', paddingRight: 10 },
   empty:           { alignItems: 'center', paddingVertical: 48, gap: 8 },
   emptyIcon:       { fontSize: 48 },
   emptyTitle:      { fontSize: 18, fontWeight: '600', color: '#374151' },
