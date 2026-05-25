@@ -375,20 +375,35 @@ export default function Calendar() {
     const startTime = `${String(slot.hour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`;
 
     if (dragged.type === 'queue') {
-      // Criar novo agendamento com duração padrão de 1 hora
-      const endHour   = slot.hour + 1 >= END_HOUR ? END_HOUR - 1 : slot.hour + 1;
-      const endTime   = `${String(endHour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`;
-      try {
-        const { data } = await api.post('/schedules', {
-          queueId:    dragged.queue.id,
-          dayOfWeek:  slot.dayOfWeek,
-          startTime,
-          endTime,
-        });
-        setSchedules(prev => [...prev, data.schedule]);
-      } catch (e) {
-        const msg = e.response?.data?.error ?? 'Erro ao agendar.';
-        alert(msg);
+      const queue   = dragged.queue;
+      const endHour = slot.hour + 1 >= END_HOUR ? END_HOUR - 1 : slot.hour + 1;
+      const endTime = `${String(endHour).padStart(2,'0')}:${String(slot.minute).padStart(2,'0')}`;
+
+      // Se a fila tem dias ativos definidos, expande para todos eles;
+      // caso contrário (sem restrição), cria só no dia onde soltou.
+      const targetDays = queue.weekDays?.length > 0
+        ? queue.weekDays
+        : [slot.dayOfWeek];
+
+      const results = await Promise.allSettled(
+        targetDays.map(day =>
+          api.post('/schedules', { queueId: queue.id, dayOfWeek: day, startTime, endTime })
+        )
+      );
+
+      const created = results
+        .filter(r => r.status === 'fulfilled')
+        .map(r => r.value.data.schedule);
+
+      if (created.length > 0) {
+        setSchedules(prev => [...prev, ...created]);
+      }
+
+      const skipped = results.filter(r => r.status === 'rejected').length;
+      if (created.length === 0) {
+        alert('Não foi possível agendar: conflito de horário em todos os dias.');
+      } else if (skipped > 0) {
+        alert(`Agendado em ${created.length} dia(s). ${skipped} dia(s) ignorado(s) por conflito de horário.`);
       }
     } else if (dragged.type === 'schedule') {
       // Mover agendamento existente (mantém a duração original)
